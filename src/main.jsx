@@ -11,7 +11,7 @@ import { faker } from "@faker-js/faker";
 import { v4 as uuidv4 } from "uuid";
 
 // AUTO-SEED IN BROWSER
-if (import.meta.env.DEV) {
+if  (import.meta.env.DEV || window.location.hostname.includes('vercel.app')) {
   setupMirage();
 
   db.on("ready", async () => {
