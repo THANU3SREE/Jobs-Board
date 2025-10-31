@@ -67,9 +67,7 @@
 ## 📸 Live Demo Screenshots
 
 ### 1️⃣ Jobs Board
-![Jobs Board](attachments/Jobs-Board.png)
-
-
+![Jobs Board](attachments/Job-Board.png)
 
 **Features Shown:**
 - Clean, modern UI with gradient background
