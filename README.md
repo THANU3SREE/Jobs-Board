@@ -137,7 +137,7 @@
 
 ---
 
-## 🚀 Getting Started
+## Getting Started
 
 ### Prerequisites
 - Node.js 18+ 
@@ -225,7 +225,7 @@ Success: UI stays updated | Error: Rollback to previous state
 
 ---
 
-## 🎯 Key Features Breakdown
+## Key Features Breakdown
 
 ### 1. Jobs Board with Pagination & Filtering
 
@@ -343,7 +343,7 @@ dangerouslySetInnerHTML={{
 
 ---
 
-## 🧠 Technical Decisions
+## Technical Decisions
 
 ### 1. Why MirageJS Instead of MSW?
 
@@ -499,7 +499,7 @@ const handleCardClick = () => {
 
 ---
 
-## 📁 Project Structure
+##  Project Structure
 
 ```
 talentflow-mini/
@@ -571,7 +571,7 @@ GET /api/candidates?search=john&stage=screen
 
 ---
 
-## 🧪 Testing
+## Testing
 
 ### Manual Testing Checklist
 
@@ -608,7 +608,7 @@ GET /api/candidates?search=john&stage=screen
 
 ---
 
-## 🚀 Deployment
+## Deployment
 
 ### Vercel Deployment
 
@@ -693,12 +693,12 @@ MIT License - feel free to use this project for learning or portfolio purposes!
 
 ---
 
-## 📧 Contact
+## Contact
 
-**Developer**: Your Name  
-**Email**: your.email@example.com  
-**GitHub**: [@yourusername](https://github.com/yourusername)  
-**LinkedIn**: [Your Name](https://linkedin.com/in/yourprofile)
+**Developer**:Avula Thanu Sree
+**Email**: b22ai011@iitj.ac.in
+**GitHub**: [THANU3SREE](https://github.com/THANU3SREE)  
+**LinkedIn**: [Avula Thanu Sree](https://linkedin.com/in/thanu-sree-avula)
 
 ---
 
