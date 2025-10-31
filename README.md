@@ -80,8 +80,7 @@
 ---
 
 ### 2️⃣ Candidates Kanban Board
-![Candidates Kanban](https://via.placeholder.com/1200x600/764ba2/ffffff?text=Candidates+Kanban+%E2%80%A2+1000%2B+Candidates+%E2%80%A2+Drag+%26+Drop)
-
+![Candidates Kanban](attachments/Candidate-List.png)
 **Features Shown:**
 - 6 stage columns (Applied, Screen, Tech, Offer, Hired, Rejected)
 - Drag-and-drop between stages
@@ -92,7 +91,7 @@
 ---
 
 ### 3️⃣ Candidate Profile & Timeline
-![Candidate Profile](https://via.placeholder.com/1200x600/10b981/ffffff?text=Candidate+Profile+%E2%80%A2+Notes+%E2%80%A2+Timeline+%E2%80%A2+%40mentions)
+![Candidate Profile](attachments/Candidate-Profile.png)
 
 **Features Shown:**
 - Candidate details card
@@ -104,7 +103,7 @@
 ---
 
 ### 4️⃣ Assessment Builder
-![Assessment Builder](https://via.placeholder.com/1200x600/f59e0b/ffffff?text=Assessment+Builder+%E2%80%A2+Live+Preview+%E2%80%A2+Validation)
+![Assessment Builder](Assesment-Builder.png)
 
 **Features Shown:**
 - Left: Builder interface with section/question management
