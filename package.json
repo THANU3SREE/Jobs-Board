@@ -7,6 +7,7 @@
         "dev": "vite",
         "build": "vite build",
         "preview": "vite preview",
+        "vercel-build": "npm install && vite build",
         "seed": "node scripts/seed.js",
         "test": "vitest",
         "test:ui": "vitest --ui",
