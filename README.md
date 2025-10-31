@@ -67,8 +67,9 @@
 ## 📸 Live Demo Screenshots
 
 ### 1️⃣ Jobs Board
-![Jobs Board](<img width="1920" height="1200" alt="image" src="https://github.com/user-attachments/assets/c11b74fc-6f22-4310-88c4-d696afcad481" />
-)
+![Jobs Board](attachments/Jobs-Board.png)
+
+
 
 **Features Shown:**
 - Clean, modern UI with gradient background
