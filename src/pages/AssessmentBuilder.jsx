@@ -423,7 +423,7 @@ export default function AssessmentBuilder() {
             onClick={save} 
             className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
           >
-            Save
+             Save
           </button>
         </div>
 
@@ -455,7 +455,7 @@ export default function AssessmentBuilder() {
                 }}
                 className="ml-2 px-3 py-1 bg-red-100 text-red-700 rounded hover:bg-red-200 text-sm"
               >
-                Delete
+                🗑️ Delete
               </button>
             </div>
             
