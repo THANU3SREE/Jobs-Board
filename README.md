@@ -103,7 +103,7 @@
 ---
 
 ### 4️⃣ Assessment Builder
-![Assessment Builder](Assesment-Builder.png)
+![Assessment Builder](attachments/Assesment-Builder.png)
 
 **Features Shown:**
 - Left: Builder interface with section/question management
