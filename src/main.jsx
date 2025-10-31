@@ -10,21 +10,38 @@ import { db } from "./db.js";
 import { faker } from "@faker-js/faker";
 import { v4 as uuidv4 } from "uuid";
 
-// AUTO-SEED IN BROWSER
-if  (import.meta.env.DEV || window.location.hostname.includes('vercel.app')) {
+// AUTO-SEED - Works in development AND production
+const shouldSeed = import.meta.env.DEV || 
+                   window.location.hostname.includes('vercel.app') || 
+                   window.location.hostname === 'localhost';
+
+console.log("🔍 Seeding check:", {
+  isDev: import.meta.env.DEV,
+  hostname: window.location.hostname,
+  shouldSeed
+});
+
+if (shouldSeed) {
   setupMirage();
 
   db.on("ready", async () => {
     try {
       const jobCount = await db.jobs.count();
+      
+      console.log("📊 Current database state:", {
+        jobs: jobCount,
+        assessments: await db.assessments.count(),
+        candidates: await db.candidates.count()
+      });
+
       if (jobCount === 0) {
-        console.log(" Starting database seeding...");
+        console.log("🌱 Starting database seeding...");
 
         const stages = ["applied", "screen", "tech", "offer", "hired", "rejected"];
         const tags = ["Remote", "Full-time", "Urgent", "Senior", "Junior", "Contract"];
 
         // 25 Jobs
-        console.log(" Creating 25 jobs...");
+        console.log("📝 Creating 25 jobs...");
         for (let i = 0; i < 25; i++) {
           const title = faker.company.catchPhrase();
           await db.jobs.add({
@@ -38,13 +55,14 @@ if  (import.meta.env.DEV || window.location.hostname.includes('vercel.app')) {
         }
 
         const jobs = await db.jobs.where("status").equals("active").toArray();
-        console.log(` Created ${jobs.length} active jobs`);
+        console.log(`✅ Created ${jobs.length} active jobs`);
 
         // 1000 Candidates
         console.log("👥 Creating 1000 candidates...");
+        const candidateBatch = [];
         for (let i = 0; i < 1000; i++) {
           const job = faker.helpers.arrayElement(jobs);
-          await db.candidates.add({
+          candidateBatch.push({
             id: uuidv4(),
             name: faker.person.fullName(),
             email: faker.internet.email(),
@@ -52,10 +70,11 @@ if  (import.meta.env.DEV || window.location.hostname.includes('vercel.app')) {
             stage: faker.helpers.arrayElement(stages),
           });
         }
-        console.log(" Created 1000 candidates");
+        await db.candidates.bulkAdd(candidateBatch);
+        console.log("✅ Created 1000 candidates");
 
-        // Assessments for first 5 active jobs (10+ questions each)
-        console.log("Creating assessments for first 5 jobs...");
+        // 5 Assessments with 17 questions each (meeting requirement of 10+)
+        console.log("📋 Creating 5 assessments...");
         const assessmentJobs = jobs.slice(0, 5);
         
         for (const job of assessmentJobs) {
@@ -152,7 +171,8 @@ if  (import.meta.env.DEV || window.location.hostname.includes('vercel.app')) {
                   type: "multi-choice", 
                   label: "Which cloud platforms have you used?", 
                   options: ["AWS", "Azure", "Google Cloud", "DigitalOcean", "Heroku"],
-                  required: false
+                  required: false,
+                  condition: { questionId: "q-cloud-" + uuidv4().slice(0, 8), value: "Yes" }
                 },
                 { 
                   id: uuidv4(), 
@@ -208,23 +228,37 @@ if  (import.meta.env.DEV || window.location.hostname.includes('vercel.app')) {
           ];
           
           const totalQuestions = sections.reduce((sum, sec) => sum + sec.questions.length, 0);
-          console.log(`   Assessment for "${job.title}" (${job.id.slice(0, 8)}...) → ${totalQuestions} questions`);
+          console.log(`   ✓ Assessment for "${job.title.slice(0, 30)}..." (${job.id.slice(0, 8)}...) → ${totalQuestions} questions`);
           
           await db.assessments.put({ jobId: job.id, sections });
         }
 
-        console.log("\n DATABASE SEEDED SUCCESSFULLY!");
-        console.log(`   • 25 jobs (${jobs.length} active)`);
-        console.log(`   • 1000 candidates`);
-        console.log(`   • ${assessmentJobs.length} assessments with 17 questions each`);
+        const finalStats = {
+          jobs: await db.jobs.count(),
+          candidates: await db.candidates.count(),
+          assessments: await db.assessments.count()
+        };
+
+        console.log("\n✅ DATABASE SEEDED SUCCESSFULLY!");
+        console.log(`   • ${finalStats.jobs} jobs (${jobs.length} active)`);
+        console.log(`   • ${finalStats.candidates} candidates`);
+        console.log(`   • ${finalStats.assessments} assessments with 17 questions each`);
         
-        alert(" Database seeded! 25 jobs, 1000 candidates, 5 assessments created.");
+        // Only show alert in production
+        if (!import.meta.env.DEV) {
+          alert(`✅ Database seeded! ${finalStats.jobs} jobs, ${finalStats.candidates} candidates, ${finalStats.assessments} assessments created.`);
+        }
       } else {
-        console.log(" Database already seeded, skipping...");
+        console.log("✓ Database already seeded, skipping...");
+        console.log("📊 Current counts:", {
+          jobs: await db.jobs.count(),
+          candidates: await db.candidates.count(),
+          assessments: await db.assessments.count()
+        });
       }
     } catch (err) {
       console.error("❌ Seeding failed:", err);
-      alert("Error seeding database. Check console for details.");
+      alert("⚠️ Error seeding database. Check console for details.");
     }
   });
 }
