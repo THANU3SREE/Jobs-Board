@@ -152,41 +152,54 @@ export default function JobsBoard() {
     const newStatus = job.status === "archived" ? "active" : "archived";
     const action = newStatus === "archived" ? "archived" : "unarchived";
     
-    console.log(`🔄 Archiving job ${job.id}: ${job.status} → ${newStatus}`);
-    
-    // Optimistic update
-    setJobs(prev => prev.map(j => 
-      j.id === job.id ? { ...j, status: newStatus } : j
-    ));
-    
-    showToast(`Job "${job.title}" ${action}`);
+    console.log(`🔄 [JobsBoard] Archiving job:`);
+    console.log(`   ID: ${job.id}`);
+    console.log(`   Title: ${job.title}`);
+    console.log(`   Status: ${job.status} → ${newStatus}`);
     
     try {
+      console.log(`📡 [JobsBoard] Sending PATCH request...`);
       const res = await fetch(`/api/jobs/${job.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: newStatus })
       });
       
+      console.log(`📡 [JobsBoard] Response status: ${res.status}`);
+      
       if (!res.ok) {
-        const errorData = await res.json();
-        console.error("❌ Archive failed:", errorData);
+        const errorData = await res.json().catch(() => ({ error: 'Unknown error' }));
+        console.error("❌ [JobsBoard] Archive failed:", errorData);
         throw new Error(errorData.error || "Failed to update status");
       }
       
       const updatedJob = await res.json();
-      console.log("✅ Archive success:", updatedJob);
+      console.log("✅ [JobsBoard] API returned:", updatedJob);
       
-      // Small delay to ensure DB is updated
-      setTimeout(async () => {
-        await load();
-        console.log("✅ Jobs reloaded after archive");
-      }, 100);
+      if (updatedJob.status !== newStatus) {
+        console.error(`❌ [JobsBoard] Status mismatch! Expected ${newStatus}, got ${updatedJob.status}`);
+        throw new Error("Status update verification failed");
+      }
+      
+      // Update local state immediately
+      setJobs(prev => prev.map(j => 
+        j.id === job.id ? updatedJob : j
+      ));
+      
+      showToast(`Job "${job.title}" ${action} successfully!`);
+      console.log(`✅ [JobsBoard] UI updated`);
+      
+      // Reload after a short delay to ensure consistency
+      setTimeout(() => {
+        console.log(`🔄 [JobsBoard] Reloading jobs...`);
+        load();
+      }, 300);
       
     } catch (err) {
-      console.error("❌ Failed to archive job:", err);
-      showToast("Failed to update job status. Rolling back...", "error");
-      load(); // Rollback
+      console.error("❌ [JobsBoard] Error:", err.message);
+      showToast(`Failed to ${action.slice(0, -1)} job: ${err.message}`, "error");
+      // Reload to restore correct state
+      load();
     }
   };
 
