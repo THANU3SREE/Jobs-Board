@@ -240,12 +240,7 @@ export default function JobsBoard() {
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold">Jobs Board</h1>
         <div className="flex gap-2">
-          <button 
-            onClick={checkDatabase}
-            className="px-3 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 transition text-sm"
-          >
-            🔍 Debug DB
-          </button>
+          
           <button 
             onClick={() => setModalJob({})} 
             className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition"
