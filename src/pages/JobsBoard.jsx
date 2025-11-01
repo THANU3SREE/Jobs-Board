@@ -165,19 +165,68 @@ export default function JobsBoard() {
     showToast(`Job "${savedJob.title}" saved successfully`);
     load();
   };
+  
 
-  // 🔥 COMPLETELY REWRITTEN ARCHIVE HANDLER
   const handleArchive = async (job) => {
-    const newStatus = job.status === "archived" ? "active" : "archived";
-    const action = newStatus === "archived" ? "archive" : "unarchive";
+  const newStatus = job.status === "archived" ? "active" : "archived";
+  const action = newStatus === "archived" ? "archive" : "unarchive";
+  
+  console.log(`\n🚀 ===== ${action.toUpperCase()} OPERATION =====`);
+  console.log(`Job: ${job.title}`);
+  console.log(`Current: ${job.status} → Target: ${newStatus}`);
+  
+  // Store previous state for rollback
+  const previousJobs = [...jobs];
+  
+  // Optimistic UI update
+  setJobs(jobs.map(j => 
+    j.id === job.id ? { ...j, status: newStatus } : j
+  ));
+  console.log(`✨ UI updated optimistically`);
+  
+  try {
+    console.log(`📡 Sending PATCH to /api/jobs/${job.id}`);
     
-    console.log(`\n🚀 ============ ${action.toUpperCase()} OPERATION ============`);
-    console.log(`📋 Job:`, {
-      id: job.id,
-      title: job.title,
-      currentStatus: job.status,
-      targetStatus: newStatus
+    const response = await fetch(`/api/jobs/${job.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: newStatus })
     });
+    
+    console.log(`📡 Response: ${response.status} ${response.statusText}`);
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`HTTP ${response.status}: ${errorText}`);
+    }
+    
+    const result = await response.json();
+    console.log(`📦 Result:`, result);
+    
+    // Verify status
+    if (result.status !== newStatus) {
+      throw new Error(`Status mismatch: got ${result.status}, expected ${newStatus}`);
+    }
+    
+    console.log(`✅ ${action.toUpperCase()} SUCCESSFUL!`);
+    showToast(`Job "${job.title}" ${action}d successfully!`);
+    
+    // Reload to ensure consistency
+    setTimeout(() => load(), 400);
+    
+  } catch (error) {
+    console.error(`❌ ${action.toUpperCase()} FAILED:`, error.message);
+    
+    // Rollback
+    setJobs(previousJobs);
+    showToast(`Failed to ${action} "${job.title}"`, "error");
+    
+    // Reload anyway to ensure consistency
+    setTimeout(() => load(), 500);
+  }
+  
+  console.log(`========================================\n`);
+};
     
     // Optimistic update
     const previousJobs = [...jobs];
