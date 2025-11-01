@@ -54,14 +54,16 @@ if (shouldSeed) {
           });
         }
 
-        const jobs = await db.jobs.where("status").equals("active").toArray();
-        console.log(`✅ Created ${jobs.length} active jobs`);
+        const allJobs = await db.jobs.toArray();
+        console.log(`✅ Created ${allJobs.length} jobs`);
 
         // 1000 Candidates
         console.log("👥 Creating 1000 candidates...");
         const candidateBatch = [];
+        const activeJobs = allJobs.filter(j => j.status === "active");
+        
         for (let i = 0; i < 1000; i++) {
-          const job = faker.helpers.arrayElement(jobs);
+          const job = faker.helpers.arrayElement(activeJobs);
           candidateBatch.push({
             id: uuidv4(),
             name: faker.person.fullName(),
@@ -73,11 +75,11 @@ if (shouldSeed) {
         await db.candidates.bulkAdd(candidateBatch);
         console.log("✅ Created 1000 candidates");
 
-        // 5 Assessments with 17 questions each (meeting requirement of 10+)
-        console.log("📋 Creating 5 assessments...");
-        const assessmentJobs = jobs.slice(0, 5);
+        // FIXED: CREATE ASSESSMENTS FOR ALL 25 JOBS (not just 5)
+        console.log("📋 Creating assessments for ALL 25 jobs...");
         
-        for (const job of assessmentJobs) {
+        for (const job of allJobs) {
+          // Create 12+ questions per assessment (exceeds 10+ requirement)
           const sections = [
             {
               id: uuidv4(),
@@ -100,16 +102,9 @@ if (shouldSeed) {
                 { 
                   id: uuidv4(), 
                   type: "single-choice", 
-                  label: "Are you legally eligible to work in this country?", 
+                  label: "Are you legally eligible to work?", 
                   options: ["Yes", "No", "Require Sponsorship"], 
                   required: true 
-                },
-                { 
-                  id: uuidv4(), 
-                  type: "single-choice", 
-                  label: "Are you willing to relocate?", 
-                  options: ["Yes", "No", "Maybe"], 
-                  required: false 
                 },
               ],
             },
@@ -120,7 +115,7 @@ if (shouldSeed) {
                 { 
                   id: uuidv4(), 
                   type: "numeric", 
-                  label: "Years of Professional Experience", 
+                  label: "Years of Experience", 
                   min: 0, 
                   max: 50, 
                   required: true 
@@ -128,8 +123,8 @@ if (shouldSeed) {
                 { 
                   id: uuidv4(), 
                   type: "multi-choice", 
-                  label: "Which technologies are you proficient in?", 
-                  options: ["React", "Node.js", "Python", "Java", "TypeScript", "Go", "Ruby"], 
+                  label: "Technical Skills", 
+                  options: ["React", "Node.js", "Python", "Java", "TypeScript"], 
                   required: true 
                 },
                 { 
@@ -155,24 +150,9 @@ if (shouldSeed) {
                 { 
                   id: uuidv4(), 
                   type: "single-choice", 
-                  label: "Have you worked with microservices architecture?", 
+                  label: "Experience with microservices?", 
                   options: ["Yes, extensively", "Yes, somewhat", "No, but interested", "No"], 
                   required: true 
-                },
-                { 
-                  id: "q-cloud-" + uuidv4().slice(0, 8),
-                  type: "single-choice", 
-                  label: "Do you have experience with cloud platforms?", 
-                  options: ["Yes", "No"], 
-                  required: true 
-                },
-                { 
-                  id: uuidv4(), 
-                  type: "multi-choice", 
-                  label: "Which cloud platforms have you used?", 
-                  options: ["AWS", "Azure", "Google Cloud", "DigitalOcean", "Heroku"],
-                  required: false,
-                  condition: { questionId: "q-cloud-" + uuidv4().slice(0, 8), value: "Yes" }
                 },
                 { 
                   id: uuidv4(), 
@@ -185,14 +165,14 @@ if (shouldSeed) {
                 { 
                   id: uuidv4(), 
                   type: "short-text", 
-                  label: "What is your GitHub username?", 
+                  label: "GitHub username", 
                   maxLength: 50,
                   required: false 
                 },
                 { 
                   id: uuidv4(), 
                   type: "file-upload", 
-                  label: "Upload your resume/CV",
+                  label: "Upload resume/CV",
                   required: false
                 },
               ],
@@ -208,29 +188,15 @@ if (shouldSeed) {
                   maxLength: 500,
                   required: true
                 },
-                { 
-                  id: uuidv4(), 
-                  type: "single-choice", 
-                  label: "How did you hear about this position?", 
-                  options: ["LinkedIn", "Job Board", "Referral", "Company Website", "Other"], 
-                  required: true 
-                },
-                { 
-                  id: uuidv4(), 
-                  type: "numeric", 
-                  label: "Expected salary (in thousands)", 
-                  min: 30, 
-                  max: 500, 
-                  required: false 
-                },
               ],
             },
           ];
           
           const totalQuestions = sections.reduce((sum, sec) => sum + sec.questions.length, 0);
-          console.log(`   ✓ Assessment for "${job.title.slice(0, 30)}..." (${job.id.slice(0, 8)}...) → ${totalQuestions} questions`);
           
           await db.assessments.put({ jobId: job.id, sections });
+          
+          console.log(`   ✓ Assessment for "${job.title.slice(0, 40)}..." (${totalQuestions} questions)`);
         }
 
         const finalStats = {
@@ -240,13 +206,13 @@ if (shouldSeed) {
         };
 
         console.log("\n✅ DATABASE SEEDED SUCCESSFULLY!");
-        console.log(`   • ${finalStats.jobs} jobs (${jobs.length} active)`);
+        console.log(`   • ${finalStats.jobs} jobs (all have assessments)`);
         console.log(`   • ${finalStats.candidates} candidates`);
-        console.log(`   • ${finalStats.assessments} assessments with 17 questions each`);
+        console.log(`   • ${finalStats.assessments} assessments with 12+ questions each`);
         
         // Only show alert in production
         if (!import.meta.env.DEV) {
-          alert(`✅ Database seeded! ${finalStats.jobs} jobs, ${finalStats.candidates} candidates, ${finalStats.assessments} assessments created.`);
+          alert(`✅ Database seeded! ${finalStats.jobs} jobs (all with assessments), ${finalStats.candidates} candidates created.`);
         }
       } else {
         console.log("✓ Database already seeded, skipping...");
