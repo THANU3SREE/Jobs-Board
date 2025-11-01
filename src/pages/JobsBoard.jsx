@@ -5,17 +5,26 @@ import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSo
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import JobModal from "../components/JobModal.jsx";
-import { db } from "../db.js"; // Import db for direct checking
+import { db } from "../db.js";
 
 const AVAILABLE_TAGS = ["Remote", "Full-time", "Urgent", "Senior", "Junior", "Contract"];
 
+// ✅ FIXED: Only the drag handle is draggable, not the entire card
 function SortableJob({ job, onEdit, onArchive }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: job.id });
   const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 };
 
   return (
-    <div ref={setNodeRef} style={style} {...attributes} {...listeners} className="bg-white p-4 rounded shadow cursor-move flex justify-between items-center">
-      <div>
+    <div ref={setNodeRef} style={style} className="bg-white p-4 rounded shadow flex justify-between items-center">
+      {/* DRAG HANDLE - Only this part is draggable */}
+      <div {...attributes} {...listeners} className="cursor-move pr-4 text-gray-400 hover:text-gray-600">
+        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+          <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
+        </svg>
+      </div>
+
+      {/* Content - NOT draggable */}
+      <div className="flex-1">
         <Link to={`/jobs/${job.id}`} className="font-medium text-blue-600 hover:underline">{job.title}</Link>
         <div className="text-sm text-gray-500">
           {job.tags?.length > 0 ? (
@@ -38,11 +47,12 @@ function SortableJob({ job, onEdit, onArchive }) {
           </span>
         </div>
       </div>
+
+      {/* Buttons - NOT draggable */}
       <div className="flex gap-2">
         <button 
           onClick={(e) => {
             e.stopPropagation();
-            e.preventDefault();
             onEdit(job);
           }} 
           className="text-xs px-2 py-1 bg-blue-100 rounded hover:bg-blue-200 transition"
@@ -52,7 +62,6 @@ function SortableJob({ job, onEdit, onArchive }) {
         <button 
           onClick={(e) => {
             e.stopPropagation();
-            e.preventDefault();
             onArchive(job);
           }} 
           className={`text-xs px-2 py-1 rounded transition ${
@@ -85,7 +94,6 @@ export default function JobsBoard() {
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
 
-  // Load jobs from API
   async function load() {
     setLoading(true);
     try {
@@ -109,7 +117,6 @@ export default function JobsBoard() {
     }
   }
 
-  // Check database directly for debugging
   const checkDatabase = async () => {
     console.log(`\n🔍 [DEBUG] Checking IndexedDB directly...`);
     try {
@@ -125,7 +132,6 @@ export default function JobsBoard() {
 
   useEffect(() => { 
     load();
-    // Debug check after mount
     setTimeout(checkDatabase, 1000);
   }, [search, status, page, selectedTags]);
 
@@ -165,143 +171,59 @@ export default function JobsBoard() {
     showToast(`Job "${savedJob.title}" saved successfully`);
     load();
   };
-  
 
   const handleArchive = async (job) => {
-  const newStatus = job.status === "archived" ? "active" : "archived";
-  const action = newStatus === "archived" ? "archive" : "unarchive";
-  
-  console.log(`\n🚀 ===== ${action.toUpperCase()} OPERATION =====`);
-  console.log(`Job: ${job.title}`);
-  console.log(`Current: ${job.status} → Target: ${newStatus}`);
-  
-  // Store previous state for rollback
-  const previousJobs = [...jobs];
-  
-  // Optimistic UI update
-  setJobs(jobs.map(j => 
-    j.id === job.id ? { ...j, status: newStatus } : j
-  ));
-  console.log(`✨ UI updated optimistically`);
-  
-  try {
-    console.log(`📡 Sending PATCH to /api/jobs/${job.id}`);
+    const newStatus = job.status === "archived" ? "active" : "archived";
+    const action = newStatus === "archived" ? "archive" : "unarchive";
     
-    const response = await fetch(`/api/jobs/${job.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status: newStatus })
-    });
+    console.log(`\n🚀 ===== ${action.toUpperCase()} OPERATION =====`);
+    console.log(`Job: ${job.title}`);
+    console.log(`Current: ${job.status} → Target: ${newStatus}`);
     
-    console.log(`📡 Response: ${response.status} ${response.statusText}`);
-    
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`HTTP ${response.status}: ${errorText}`);
-    }
-    
-    const result = await response.json();
-    console.log(`📦 Result:`, result);
-    
-    // Verify status
-    if (result.status !== newStatus) {
-      throw new Error(`Status mismatch: got ${result.status}, expected ${newStatus}`);
-    }
-    
-    console.log(`✅ ${action.toUpperCase()} SUCCESSFUL!`);
-    showToast(`Job "${job.title}" ${action}d successfully!`);
-    
-    // Reload to ensure consistency
-    setTimeout(() => load(), 400);
-    
-  } catch (error) {
-    console.error(`❌ ${action.toUpperCase()} FAILED:`, error.message);
-    
-    // Rollback
-    setJobs(previousJobs);
-    showToast(`Failed to ${action} "${job.title}"`, "error");
-    
-    // Reload anyway to ensure consistency
-    setTimeout(() => load(), 500);
-  }
-  
-  console.log(`========================================\n`);
-};
-    
-    // Optimistic update
     const previousJobs = [...jobs];
-    const optimisticJobs = jobs.map(j => 
+    
+    // Optimistic UI update
+    setJobs(jobs.map(j => 
       j.id === job.id ? { ...j, status: newStatus } : j
-    );
-    setJobs(optimisticJobs);
-    console.log(`✨ Optimistic UI update applied`);
+    ));
+    console.log(`✨ UI updated optimistically`);
     
     try {
-      console.log(`📡 Sending PATCH request...`);
+      console.log(`📡 Sending PATCH to /api/jobs/${job.id}`);
       
       const response = await fetch(`/api/jobs/${job.id}`, {
         method: "PATCH",
-        headers: { 
-          "Content-Type": "application/json",
-          "Accept": "application/json"
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: newStatus })
       });
       
-      console.log(`📡 Response received:`, {
-        status: response.status,
-        statusText: response.statusText,
-        ok: response.ok
-      });
+      console.log(`📡 Response: ${response.status} ${response.statusText}`);
       
       if (!response.ok) {
-        const errorBody = await response.text();
-        console.error(`❌ Response not OK:`, errorBody);
-        throw new Error(`Server error: ${response.status} - ${errorBody}`);
+        const errorText = await response.text();
+        throw new Error(`HTTP ${response.status}: ${errorText}`);
       }
       
       const result = await response.json();
-      console.log(`📦 Response body:`, result);
+      console.log(`📦 Result:`, result);
       
-      // CRITICAL: Verify the status actually changed
       if (result.status !== newStatus) {
-        console.error(`❌ STATUS VERIFICATION FAILED!`);
-        console.error(`   Expected: ${newStatus}`);
-        console.error(`   Received: ${result.status}`);
-        throw new Error(`Server returned incorrect status: ${result.status} (expected ${newStatus})`);
+        throw new Error(`Status mismatch: got ${result.status}, expected ${newStatus}`);
       }
       
-      console.log(`✅ Status verified: ${result.status}`);
       console.log(`✅ ${action.toUpperCase()} SUCCESSFUL!`);
-      console.log(`============================================\n`);
-      
       showToast(`Job "${job.title}" ${action}d successfully!`);
       
-      // Force reload after a short delay
-      setTimeout(() => {
-        console.log(`🔄 Reloading jobs list to ensure consistency...`);
-        load();
-      }, 300);
+      setTimeout(() => load(), 400);
       
     } catch (error) {
-      console.error(`\n❌ ============ ${action.toUpperCase()} FAILED ============`);
-      console.error(`Error:`, error);
-      console.error(`Message:`, error.message);
-      console.error(`Stack:`, error.stack);
-      console.error(`============================================\n`);
-      
-      // Rollback optimistic update
-      console.log(`🔄 Rolling back to previous state`);
+      console.error(`❌ ${action.toUpperCase()} FAILED:`, error.message);
       setJobs(previousJobs);
-      
-      showToast(
-        `Failed to ${action} "${job.title}": ${error.message}`,
-        "error"
-      );
-      
-      // Also reload to ensure consistency
+      showToast(`Failed to ${action} "${job.title}"`, "error");
       setTimeout(() => load(), 500);
     }
+    
+    console.log(`========================================\n`);
   };
 
   const toggleTag = (tag) => {
