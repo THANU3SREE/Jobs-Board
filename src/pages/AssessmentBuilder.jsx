@@ -1,7 +1,15 @@
 import { useParams } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { v4 as uuidv4 } from "uuid";
-import { questionTypes } from "../components/QuestionTypes.jsx";
+
+const questionTypes = [
+  { value: "single-choice", label: "Single Choice" },
+  { value: "multi-choice", label: "Multi Choice" },
+  { value: "short-text", label: "Short Text" },
+  { value: "long-text", label: "Long Text" },
+  { value: "numeric", label: "Numeric" },
+  { value: "file-upload", label: "File Upload" },
+];
 
 function PreviewForm({ assessment, responses, setResponses }) {
   const [errors, setErrors] = useState({});
@@ -257,6 +265,12 @@ export default function AssessmentBuilder() {
   const [selectedQuestion, setSelectedQuestion] = useState(null);
   const [optionInput, setOptionInput] = useState("");
   const [loading, setLoading] = useState(true);
+  const [toast, setToast] = useState(null);
+
+  const showToast = (message) => {
+    setToast(message);
+    setTimeout(() => setToast(null), 2000);
+  };
 
   useEffect(() => {
     setLoading(true);
@@ -281,13 +295,13 @@ export default function AssessmentBuilder() {
         body: JSON.stringify(assessment)
       });
       if (res.ok) {
-        alert("✅ Assessment saved successfully!");
+        showToast("✅ Assessment saved successfully!");
       } else {
-        alert("❌ Failed to save assessment. Please try again.");
+        showToast("❌ Failed to save assessment");
       }
     } catch (err) {
       console.error("Save error:", err);
-      alert("❌ Error saving assessment.");
+      showToast("❌ Error saving assessment");
     }
   };
 
@@ -322,7 +336,6 @@ export default function AssessmentBuilder() {
       return { ...prev, sections: secs };
     });
     
-    // Update selectedSection to have the new question
     setSelectedSection(prev => ({
       ...prev,
       questions: [...(prev.questions || []), newQ]
@@ -423,7 +436,7 @@ export default function AssessmentBuilder() {
             onClick={save} 
             className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
           >
-             Save
+            💾 Save
           </button>
         </div>
 
@@ -486,6 +499,11 @@ export default function AssessmentBuilder() {
                     <div className="text-sm text-gray-600">
                       {q.type} {q.options ? `(${q.options.length} options)` : ""} {q.required ? "• Required" : ""}
                     </div>
+                    <div className="mt-1">
+                      <code className="text-xs bg-gray-100 px-2 py-0.5 rounded font-mono text-gray-500">
+                        ID: {q.id.slice(0, 8)}...
+                      </code>
+                    </div>
                   </div>
                   <button
                     onClick={(e) => {
@@ -533,7 +551,34 @@ export default function AssessmentBuilder() {
 
         {selectedQuestion && (
           <div className="mt-6 p-6 bg-white rounded-lg shadow-lg border-2 border-blue-300">
-            <h3 className="font-bold text-lg mb-4">✏️ Edit Question</h3>
+            <div className="flex justify-between items-start mb-4">
+              <div>
+                <h3 className="font-bold text-lg">✏️ Edit Question</h3>
+                <div className="flex items-center gap-2 mt-1">
+                  <span className="text-xs text-gray-600">Question ID:</span>
+                  <code className="text-xs bg-gray-100 px-2 py-1 rounded font-mono text-blue-600">
+                    {selectedQuestion.id}
+                  </code>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(selectedQuestion.id);
+                      showToast("📋 Question ID copied!");
+                    }}
+                    className="text-xs text-blue-600 hover:underline"
+                  >
+                    📋 Copy
+                  </button>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  showToast("💾 Changes saved!");
+                }}
+                className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition font-medium"
+              >
+                💾 Save Question
+              </button>
+            </div>
 
             <div className="space-y-4">
               <div>
@@ -630,22 +675,45 @@ export default function AssessmentBuilder() {
               </div>
 
               <div>
-                <label className="block font-medium mb-1">Conditional Logic (Advanced)</label>
-                <div className="flex gap-2">
-                  <input
-                    placeholder="Question ID"
-                    value={selectedQuestion.condition?.questionId ?? ""}
-                    onChange={e => updateQuestion("condition", { ...selectedQuestion.condition, questionId: e.target.value })}
-                    className="flex-1 p-2 border rounded"
-                  />
-                  <input
-                    placeholder="Value"
-                    value={selectedQuestion.condition?.value ?? ""}
-                    onChange={e => updateQuestion("condition", { ...selectedQuestion.condition, value: e.target.value })}
-                    className="flex-1 p-2 border rounded"
-                  />
+                <label className="block font-medium mb-1">Conditional Logic (Show only if...)</label>
+                <div className="space-y-2">
+                  <div className="flex gap-2">
+                    <input
+                      placeholder="Paste Question ID here"
+                      value={selectedQuestion.condition?.questionId ?? ""}
+                      onChange={e => updateQuestion("condition", { ...selectedQuestion.condition, questionId: e.target.value })}
+                      className="flex-1 p-2 border rounded font-mono text-sm"
+                    />
+                    <input
+                      placeholder="Expected Value"
+                      value={selectedQuestion.condition?.value ?? ""}
+                      onChange={e => updateQuestion("condition", { ...selectedQuestion.condition, value: e.target.value })}
+                      className="flex-1 p-2 border rounded"
+                    />
+                    {selectedQuestion.condition?.questionId && (
+                      <button
+                        onClick={() => updateQuestion("condition", undefined)}
+                        className="px-3 py-2 bg-red-100 text-red-700 rounded hover:bg-red-200"
+                      >
+                        Clear
+                      </button>
+                    )}
+                  </div>
+                  <div className="bg-blue-50 border border-blue-200 rounded p-3 text-sm">
+                    <p className="font-medium text-blue-900 mb-1">💡 How it works:</p>
+                    <ol className="text-blue-800 space-y-1 ml-4 list-decimal">
+                      <li>Click a question above to see its ID</li>
+                      <li>Copy the ID and paste it here</li>
+                      <li>Enter the value that should trigger this question</li>
+                      <li>This question will only show when that condition is met</li>
+                    </ol>
+                    {selectedQuestion.condition?.questionId && (
+                      <p className="mt-2 text-blue-900 font-medium">
+                        ✓ This question shows when question <code className="bg-blue-100 px-1 rounded">{selectedQuestion.condition.questionId.slice(0, 8)}...</code> equals "{selectedQuestion.condition.value}"
+                      </p>
+                    )}
+                  </div>
                 </div>
-                <p className="text-xs text-gray-600 mt-1">Show this question only if another question has a specific value</p>
               </div>
             </div>
           </div>
@@ -668,6 +736,33 @@ export default function AssessmentBuilder() {
           )}
         </div>
       </div>
+
+      {toast && (
+        <div className="fixed bottom-4 right-4 bg-green-600 text-white px-6 py-3 rounded-lg shadow-lg z-50 animate-slideIn">
+          <div className="flex items-center gap-2">
+            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+            </svg>
+            <span className="font-medium">{toast}</span>
+          </div>
+        </div>
+      )}
+
+      <style jsx>{`
+        @keyframes slideIn {
+          from {
+            transform: translateY(100%);
+            opacity: 0;
+          }
+          to {
+            transform: translateY(0);
+            opacity: 1;
+          }
+        }
+        .animate-slideIn {
+          animation: slideIn 0.3s ease-out;
+        }
+      `}</style>
     </div>
   );
 }
