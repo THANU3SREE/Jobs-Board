@@ -93,31 +93,45 @@ export function setupMirage() {
         }
 
         const id = request.params.id;
-        const attrs = JSON.parse(request.requestBody);
+        const changes = JSON.parse(request.requestBody);
         
-        console.log(`📝 PATCH /jobs/${id} - Updating with:`, attrs);
+        console.log(`📝 PATCH /jobs/${id} - Changes requested:`, changes);
+        
+        // CRITICAL: Get the existing job first
+        const existingJob = await db.jobs.get(id);
+        
+        if (!existingJob) {
+          console.error(`❌ Job ${id} not found in database`);
+          return new Response(404, {}, { error: "Job not found" });
+        }
+        
+        console.log(`📌 Before update:`, existingJob);
         
         // Check if slug is being updated and if it's unique
-        if (attrs.slug) {
-          const existing = await db.jobs.where('slug').equals(attrs.slug).first();
+        if (changes.slug && changes.slug !== existingJob.slug) {
+          const existing = await db.jobs.where('slug').equals(changes.slug).first();
           if (existing && existing.id !== id) {
-            console.error(`❌ Slug conflict: ${attrs.slug} already exists`);
+            console.error(`❌ Slug conflict: ${changes.slug} already exists`);
             return new Response(400, {}, { error: "Slug already taken" });
           }
         }
         
-        // CRITICAL FIX: Actually update the database
-        const updatedCount = await db.jobs.update(id, attrs);
+        // CRITICAL FIX: Use put() instead of update() for more reliable updates
+        const updatedJob = { ...existingJob, ...changes };
+        await db.jobs.put(updatedJob);
         
-        if (updatedCount === 0) {
-          console.error(`❌ Failed to update job ${id} - job not found`);
-          return new Response(404, {}, { error: "Job not found" });
+        // Verify the update worked
+        const verifyJob = await db.jobs.get(id);
+        console.log(`✅ After update:`, verifyJob);
+        
+        if (changes.status && verifyJob.status !== changes.status) {
+          console.error(`❌ Status update failed! Expected ${changes.status}, got ${verifyJob.status}`);
+          return new Response(500, {}, { error: "Status update verification failed" });
         }
         
-        const updatedJob = await db.jobs.get(id);
-        console.log(`✅ PATCH /jobs/${id} - Successfully updated:`, updatedJob);
+        console.log(`✅ PATCH /jobs/${id} - Successfully updated and verified`);
         
-        return updatedJob;
+        return verifyJob;
       });
 
       this.patch("/jobs/:id/reorder", async (schema, request) => {
@@ -136,8 +150,8 @@ export function setupMirage() {
           return new Response(404, {}, { error: "Jobs not found" });
         }
 
-        await db.jobs.update(fromJob.id, { order: toOrder });
-        await db.jobs.update(toJob.id, { order: fromOrder });
+        await db.jobs.put({ ...fromJob, order: toOrder });
+        await db.jobs.put({ ...toJob, order: fromOrder });
 
         console.log(`✅ Reordered job ${fromJob.id} from ${fromOrder} to ${toOrder}`);
         return { success: true };
@@ -195,7 +209,12 @@ export function setupMirage() {
         const id = request.params.id;
         const changes = JSON.parse(request.requestBody);
         
-        await db.candidates.update(id, changes);
+        const existing = await db.candidates.get(id);
+        if (!existing) {
+          return new Response(404, {}, { error: "Candidate not found" });
+        }
+        
+        await db.candidates.put({ ...existing, ...changes });
         
         if (changes.stage) {
           const stageName = changes.stage.charAt(0).toUpperCase() + changes.stage.slice(1);
