@@ -152,6 +152,8 @@ export default function JobsBoard() {
     const newStatus = job.status === "archived" ? "active" : "archived";
     const action = newStatus === "archived" ? "archived" : "unarchived";
     
+    console.log(`🔄 Archiving job ${job.id}: ${job.status} → ${newStatus}`);
+    
     // Optimistic update
     setJobs(prev => prev.map(j => 
       j.id === job.id ? { ...j, status: newStatus } : j
@@ -167,13 +169,22 @@ export default function JobsBoard() {
       });
       
       if (!res.ok) {
-        throw new Error("Failed to update status");
+        const errorData = await res.json();
+        console.error("❌ Archive failed:", errorData);
+        throw new Error(errorData.error || "Failed to update status");
       }
       
-      // Reload to ensure consistency
-      await load();
+      const updatedJob = await res.json();
+      console.log("✅ Archive success:", updatedJob);
+      
+      // Small delay to ensure DB is updated
+      setTimeout(async () => {
+        await load();
+        console.log("✅ Jobs reloaded after archive");
+      }, 100);
+      
     } catch (err) {
-      console.error("Failed to archive job:", err);
+      console.error("❌ Failed to archive job:", err);
       showToast("Failed to update job status. Rolling back...", "error");
       load(); // Rollback
     }
