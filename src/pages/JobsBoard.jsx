@@ -5,6 +5,7 @@ import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSo
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import JobModal from "../components/JobModal.jsx";
+import { db } from "../db.js"; // Import db for direct checking
 
 const AVAILABLE_TAGS = ["Remote", "Full-time", "Urgent", "Senior", "Junior", "Contract"];
 
@@ -84,6 +85,7 @@ export default function JobsBoard() {
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
 
+  // Load jobs from API
   async function load() {
     setLoading(true);
     try {
@@ -107,8 +109,24 @@ export default function JobsBoard() {
     }
   }
 
+  // Check database directly for debugging
+  const checkDatabase = async () => {
+    console.log(`\n🔍 [DEBUG] Checking IndexedDB directly...`);
+    try {
+      const allJobs = await db.jobs.toArray();
+      console.log(`📊 [DEBUG] Total jobs in DB:`, allJobs.length);
+      allJobs.slice(0, 5).forEach((j, i) => {
+        console.log(`   ${i + 1}. ${j.title.slice(0, 30)}... (${j.status})`);
+      });
+    } catch (err) {
+      console.error(`❌ [DEBUG] Failed to read DB:`, err);
+    }
+  };
+
   useEffect(() => { 
-    load(); 
+    load();
+    // Debug check after mount
+    setTimeout(checkDatabase, 1000);
   }, [search, status, page, selectedTags]);
 
   const showToast = (message, type = "success") => {
@@ -148,58 +166,92 @@ export default function JobsBoard() {
     load();
   };
 
+  // 🔥 COMPLETELY REWRITTEN ARCHIVE HANDLER
   const handleArchive = async (job) => {
     const newStatus = job.status === "archived" ? "active" : "archived";
-    const action = newStatus === "archived" ? "archived" : "unarchived";
+    const action = newStatus === "archived" ? "archive" : "unarchive";
     
-    console.log(`🔄 [JobsBoard] Archiving job:`);
-    console.log(`   ID: ${job.id}`);
-    console.log(`   Title: ${job.title}`);
-    console.log(`   Status: ${job.status} → ${newStatus}`);
+    console.log(`\n🚀 ============ ${action.toUpperCase()} OPERATION ============`);
+    console.log(`📋 Job:`, {
+      id: job.id,
+      title: job.title,
+      currentStatus: job.status,
+      targetStatus: newStatus
+    });
+    
+    // Optimistic update
+    const previousJobs = [...jobs];
+    const optimisticJobs = jobs.map(j => 
+      j.id === job.id ? { ...j, status: newStatus } : j
+    );
+    setJobs(optimisticJobs);
+    console.log(`✨ Optimistic UI update applied`);
     
     try {
-      console.log(`📡 [JobsBoard] Sending PATCH request...`);
-      const res = await fetch(`/api/jobs/${job.id}`, {
+      console.log(`📡 Sending PATCH request...`);
+      
+      const response = await fetch(`/api/jobs/${job.id}`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          "Accept": "application/json"
+        },
         body: JSON.stringify({ status: newStatus })
       });
       
-      console.log(`📡 [JobsBoard] Response status: ${res.status}`);
+      console.log(`📡 Response received:`, {
+        status: response.status,
+        statusText: response.statusText,
+        ok: response.ok
+      });
       
-      if (!res.ok) {
-        const errorData = await res.json().catch(() => ({ error: 'Unknown error' }));
-        console.error("❌ [JobsBoard] Archive failed:", errorData);
-        throw new Error(errorData.error || "Failed to update status");
+      if (!response.ok) {
+        const errorBody = await response.text();
+        console.error(`❌ Response not OK:`, errorBody);
+        throw new Error(`Server error: ${response.status} - ${errorBody}`);
       }
       
-      const updatedJob = await res.json();
-      console.log("✅ [JobsBoard] API returned:", updatedJob);
+      const result = await response.json();
+      console.log(`📦 Response body:`, result);
       
-      if (updatedJob.status !== newStatus) {
-        console.error(`❌ [JobsBoard] Status mismatch! Expected ${newStatus}, got ${updatedJob.status}`);
-        throw new Error("Status update verification failed");
+      // CRITICAL: Verify the status actually changed
+      if (result.status !== newStatus) {
+        console.error(`❌ STATUS VERIFICATION FAILED!`);
+        console.error(`   Expected: ${newStatus}`);
+        console.error(`   Received: ${result.status}`);
+        throw new Error(`Server returned incorrect status: ${result.status} (expected ${newStatus})`);
       }
       
-      // Update local state immediately
-      setJobs(prev => prev.map(j => 
-        j.id === job.id ? updatedJob : j
-      ));
+      console.log(`✅ Status verified: ${result.status}`);
+      console.log(`✅ ${action.toUpperCase()} SUCCESSFUL!`);
+      console.log(`============================================\n`);
       
-      showToast(`Job "${job.title}" ${action} successfully!`);
-      console.log(`✅ [JobsBoard] UI updated`);
+      showToast(`Job "${job.title}" ${action}d successfully!`);
       
-      // Reload after a short delay to ensure consistency
+      // Force reload after a short delay
       setTimeout(() => {
-        console.log(`🔄 [JobsBoard] Reloading jobs...`);
+        console.log(`🔄 Reloading jobs list to ensure consistency...`);
         load();
       }, 300);
       
-    } catch (err) {
-      console.error("❌ [JobsBoard] Error:", err.message);
-      showToast(`Failed to ${action.slice(0, -1)} job: ${err.message}`, "error");
-      // Reload to restore correct state
-      load();
+    } catch (error) {
+      console.error(`\n❌ ============ ${action.toUpperCase()} FAILED ============`);
+      console.error(`Error:`, error);
+      console.error(`Message:`, error.message);
+      console.error(`Stack:`, error.stack);
+      console.error(`============================================\n`);
+      
+      // Rollback optimistic update
+      console.log(`🔄 Rolling back to previous state`);
+      setJobs(previousJobs);
+      
+      showToast(
+        `Failed to ${action} "${job.title}": ${error.message}`,
+        "error"
+      );
+      
+      // Also reload to ensure consistency
+      setTimeout(() => load(), 500);
     }
   };
 
@@ -216,12 +268,20 @@ export default function JobsBoard() {
     <div className="max-w-4xl mx-auto p-6">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold">Jobs Board</h1>
-        <button 
-          onClick={() => setModalJob({})} 
-          className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition"
-        >
-          + New Job
-        </button>
+        <div className="flex gap-2">
+          <button 
+            onClick={checkDatabase}
+            className="px-3 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 transition text-sm"
+          >
+            🔍 Debug DB
+          </button>
+          <button 
+            onClick={() => setModalJob({})} 
+            className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition"
+          >
+            + New Job
+          </button>
+        </div>
       </div>
 
       <div className="mb-6 space-y-3">
