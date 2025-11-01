@@ -85,71 +85,90 @@ export function setupMirage() {
         return job;
       });
 
-      // 🔥 FIXED: This is the corrected PATCH endpoint
+      // 🔥 FIXED: Corrected PATCH endpoint with proper response handling
       this.patch("/jobs/:id", async (schema, request) => {
-        await new Promise(r => setTimeout(r, faker.number.int({ min: 200, max: 600 }))); // Reduced latency for better UX
+        const delay = faker.number.int({ min: 100, max: 400 });
+        await new Promise(r => setTimeout(r, delay));
         
-        // Reduce error rate for archive/unarchive operations
-        if (Math.random() < 0.03) { // Reduced from 0.1 to 0.03
-          console.error("❌ PATCH /jobs/:id - Simulated failure");
-          return new Response(500, {}, { error: "Failed to update job" });
-        }
+        // DISABLE error simulation for debugging
+        // if (Math.random() < 0.03) {
+        //   console.error("❌ PATCH /jobs/:id - Simulated failure");
+        //   return new Response(500, {}, { error: "Failed to update job" });
+        // }
 
         const id = request.params.id;
         const changes = JSON.parse(request.requestBody);
         
-        console.log(`📝 PATCH /jobs/${id} - Changes requested:`, changes);
+        console.log(`\n========================================`);
+        console.log(`📝 PATCH /jobs/${id}`);
+        console.log(`📦 Changes requested:`, JSON.stringify(changes, null, 2));
         
         // CRITICAL: Get the existing job first
         const existingJob = await db.jobs.get(id);
         
         if (!existingJob) {
           console.error(`❌ Job ${id} not found in database`);
+          console.log(`========================================\n`);
           return new Response(404, {}, { error: "Job not found" });
         }
         
-        console.log(`📌 Before update:`, existingJob);
+        console.log(`📌 Current job state:`, JSON.stringify(existingJob, null, 2));
         
         // Check if slug is being updated and if it's unique
         if (changes.slug && changes.slug !== existingJob.slug) {
           const existing = await db.jobs.where('slug').equals(changes.slug).first();
           if (existing && existing.id !== id) {
             console.error(`❌ Slug conflict: ${changes.slug} already exists`);
+            console.log(`========================================\n`);
             return new Response(400, {}, { error: "Slug already taken" });
           }
         }
         
-        // 🔥 FIX: Use put() with merged object for reliable updates
+        // 🔥 FIX: Create updated job object
         const updatedJob = { 
           ...existingJob, 
           ...changes,
-          id: existingJob.id, // Ensure ID is preserved
-          order: existingJob.order // Ensure order is preserved
+          id: existingJob.id,
+          order: existingJob.order
         };
         
+        console.log(`🔧 Merged job object:`, JSON.stringify(updatedJob, null, 2));
+        
         try {
-          await db.jobs.put(updatedJob);
-          console.log(`✅ Put operation completed`);
+          // Use transaction for atomic update
+          await db.transaction('rw', db.jobs, async () => {
+            await db.jobs.put(updatedJob);
+          });
+          console.log(`✅ Database transaction completed`);
         } catch (err) {
           console.error(`❌ Database put failed:`, err);
-          return new Response(500, {}, { error: "Database update failed" });
+          console.log(`========================================\n`);
+          return new Response(500, {}, { error: "Database update failed: " + err.message });
         }
         
-        // 🔥 FIX: Verify the update worked by reading it back
+        // Verify the update by reading it back
         const verifiedJob = await db.jobs.get(id);
-        console.log(`✅ After update (verified):`, verifiedJob);
+        console.log(`🔍 Verified job from DB:`, JSON.stringify(verifiedJob, null, 2));
         
-        // 🔥 FIX: Check if the update actually worked
-        if (changes.status && verifiedJob.status !== changes.status) {
-          console.error(`❌ Status update failed! Expected ${changes.status}, got ${verifiedJob.status}`);
-          // Try one more time with a direct approach
-          await db.jobs.where('id').equals(id).modify({ status: changes.status });
-          const secondVerify = await db.jobs.get(id);
-          console.log(`🔄 Second attempt result:`, secondVerify);
-          return secondVerify;
+        // Double-check status if it was changed
+        if (changes.status) {
+          if (verifiedJob.status !== changes.status) {
+            console.error(`❌ STATUS MISMATCH! Expected: ${changes.status}, Got: ${verifiedJob.status}`);
+            console.log(`🔄 Attempting direct modification...`);
+            
+            await db.jobs.where('id').equals(id).modify({ status: changes.status });
+            const finalVerify = await db.jobs.get(id);
+            
+            console.log(`🔍 Final verification:`, JSON.stringify(finalVerify, null, 2));
+            console.log(`========================================\n`);
+            return finalVerify;
+          } else {
+            console.log(`✅ Status correctly updated to: ${verifiedJob.status}`);
+          }
         }
         
-        console.log(`✅ PATCH /jobs/${id} - Successfully updated and verified`);
+        console.log(`✅ PATCH completed successfully`);
+        console.log(`========================================\n`);
         
         return verifiedJob;
       });
