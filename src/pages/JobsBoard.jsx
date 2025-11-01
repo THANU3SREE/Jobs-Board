@@ -6,7 +6,6 @@ import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import JobModal from "../components/JobModal.jsx";
 
-// NEW: Available tags constant
 const AVAILABLE_TAGS = ["Remote", "Full-time", "Urgent", "Senior", "Junior", "Contract"];
 
 function SortableJob({ job, onEdit, onArchive }) {
@@ -30,13 +29,38 @@ function SortableJob({ job, onEdit, onArchive }) {
             <span className="text-gray-400">No tags</span>
           )}
         </div>
+        <div className="mt-1">
+          <span className={`text-xs px-2 py-0.5 rounded ${
+            job.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'
+          }`}>
+            {job.status === 'active' ? '● Active' : '○ Archived'}
+          </span>
+        </div>
       </div>
       <div className="flex gap-2">
-        <button onClick={() => onEdit(job)} className="text-xs px-2 py-1 bg-blue-100 rounded hover:bg-blue-200 transition">
+        <button 
+          onClick={(e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            onEdit(job);
+          }} 
+          className="text-xs px-2 py-1 bg-blue-100 rounded hover:bg-blue-200 transition"
+        >
           Edit
         </button>
-        <button onClick={() => onArchive(job)} className="text-xs px-2 py-1 bg-red-100 rounded hover:bg-red-200 transition">
-          {job.status === "archived" ? "Unarchive" : "Archive"}
+        <button 
+          onClick={(e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            onArchive(job);
+          }} 
+          className={`text-xs px-2 py-1 rounded transition ${
+            job.status === 'archived' 
+              ? 'bg-green-100 hover:bg-green-200 text-green-700' 
+              : 'bg-red-100 hover:bg-red-200 text-red-700'
+          }`}
+        >
+          {job.status === "archived" ? "✓ Unarchive" : "✕ Archive"}
         </button>
       </div>
     </div>
@@ -47,11 +71,12 @@ export default function JobsBoard() {
   const [jobs, setJobs] = useState([]);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
-  const [selectedTags, setSelectedTags] = useState([]); // NEW: Tags filter
+  const [selectedTags, setSelectedTags] = useState([]);
   const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1); // NEW: Track total pages
+  const [totalPages, setTotalPages] = useState(1);
   const [modalJob, setModalJob] = useState(null);
-  const [loading, setLoading] = useState(false); // NEW: Loading state
+  const [loading, setLoading] = useState(false);
+  const [toast, setToast] = useState(null);
   const pageSize = 10;
 
   const sensors = useSensors(
@@ -65,7 +90,6 @@ export default function JobsBoard() {
       const res = await fetch(`/api/jobs?search=${search}&status=${status}&page=${page}&pageSize=${pageSize}`);
       const json = await res.json();
       
-      // NEW: Filter by tags on client side (or modify API to support it)
       let filteredJobs = json.data;
       if (selectedTags.length > 0) {
         filteredJobs = json.data.filter(job => 
@@ -77,7 +101,7 @@ export default function JobsBoard() {
       setTotalPages(Math.ceil(json.total / pageSize));
     } catch (err) {
       console.error("Failed to load jobs:", err);
-      alert("Failed to load jobs. Please try again.");
+      showToast("Failed to load jobs. Please try again.", "error");
     } finally {
       setLoading(false);
     }
@@ -85,7 +109,12 @@ export default function JobsBoard() {
 
   useEffect(() => { 
     load(); 
-  }, [search, status, page, selectedTags]); // NEW: Added selectedTags
+  }, [search, status, page, selectedTags]);
+
+  const showToast = (message, type = "success") => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3000);
+  };
 
   const handleDragEnd = async (event) => {
     const { active, over } = event;
@@ -107,43 +136,56 @@ export default function JobsBoard() {
       if (!res.ok) {
         throw new Error("Reorder failed");
       }
+      showToast("Job reordered successfully");
     } catch (err) {
-      alert("Reorder failed – rolling back");
+      showToast("Reorder failed – rolling back", "error");
       load();
     }
   };
 
   const handleSave = (savedJob) => {
-    setJobs(prev => {
-      const idx = prev.findIndex(j => j.id === savedJob.id);
-      return idx >= 0 ? prev.map((j, i) => (i === idx ? savedJob : j)) : [...prev, savedJob];
-    });
-    load(); // Refresh to get updated data
+    showToast(`Job "${savedJob.title}" saved successfully`);
+    load();
   };
 
   const handleArchive = async (job) => {
     const newStatus = job.status === "archived" ? "active" : "archived";
+    const action = newStatus === "archived" ? "archived" : "unarchived";
+    
+    // Optimistic update
+    setJobs(prev => prev.map(j => 
+      j.id === job.id ? { ...j, status: newStatus } : j
+    ));
+    
+    showToast(`Job "${job.title}" ${action}`);
+    
     try {
       const res = await fetch(`/api/jobs/${job.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: newStatus })
       });
-      if (res.ok) load();
+      
+      if (!res.ok) {
+        throw new Error("Failed to update status");
+      }
+      
+      // Reload to ensure consistency
+      await load();
     } catch (err) {
       console.error("Failed to archive job:", err);
-      alert("Failed to update job status.");
+      showToast("Failed to update job status. Rolling back...", "error");
+      load(); // Rollback
     }
   };
 
-  // NEW: Toggle tag selection
   const toggleTag = (tag) => {
     setSelectedTags(prev => 
       prev.includes(tag) 
         ? prev.filter(t => t !== tag) 
         : [...prev, tag]
     );
-    setPage(1); // Reset to first page when filtering
+    setPage(1);
   };
 
   return (
@@ -158,7 +200,6 @@ export default function JobsBoard() {
         </button>
       </div>
 
-      {/* Filters Section */}
       <div className="mb-6 space-y-3">
         <div className="flex gap-2">
           <input 
@@ -178,7 +219,6 @@ export default function JobsBoard() {
           </select>
         </div>
 
-        {/* NEW: Tags filter */}
         <div className="flex flex-wrap gap-2 items-center">
           <span className="text-sm font-medium text-gray-700">Filter by tags:</span>
           {AVAILABLE_TAGS.map(tag => (
@@ -205,7 +245,6 @@ export default function JobsBoard() {
         </div>
       </div>
 
-      {/* Loading State */}
       {loading ? (
         <div className="text-center py-12 text-gray-500">Loading jobs...</div>
       ) : jobs.length === 0 ? (
@@ -229,7 +268,6 @@ export default function JobsBoard() {
             </SortableContext>
           </DndContext>
 
-          {/* Pagination */}
           <div className="mt-6 flex justify-between items-center">
             <button 
               onClick={() => setPage(p => Math.max(1, p - 1))} 
@@ -259,6 +297,35 @@ export default function JobsBoard() {
           onClose={() => setModalJob(null)} 
         />
       )}
+
+      {toast && (
+        <div className={`fixed top-4 right-4 px-6 py-3 rounded-lg shadow-lg z-50 animate-slideIn ${
+          toast.type === 'error' ? 'bg-red-600' : 'bg-green-600'
+        } text-white`}>
+          <div className="flex items-center gap-2">
+            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+            </svg>
+            <span className="font-medium">{toast.message}</span>
+          </div>
+        </div>
+      )}
+
+      <style jsx>{`
+        @keyframes slideIn {
+          from {
+            transform: translateX(100%);
+            opacity: 0;
+          }
+          to {
+            transform: translateX(0);
+            opacity: 1;
+          }
+        }
+        .animate-slideIn {
+          animation: slideIn 0.3s ease-out;
+        }
+      `}</style>
     </div>
   );
 }
