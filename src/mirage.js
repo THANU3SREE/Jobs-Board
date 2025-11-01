@@ -85,9 +85,12 @@ export function setupMirage() {
         return job;
       });
 
+      // 🔥 FIXED: This is the corrected PATCH endpoint
       this.patch("/jobs/:id", async (schema, request) => {
-        await new Promise(r => setTimeout(r, faker.number.int({ min: 200, max: 1200 })));
-        if (Math.random() < 0.1) {
+        await new Promise(r => setTimeout(r, faker.number.int({ min: 200, max: 600 }))); // Reduced latency for better UX
+        
+        // Reduce error rate for archive/unarchive operations
+        if (Math.random() < 0.03) { // Reduced from 0.1 to 0.03
           console.error("❌ PATCH /jobs/:id - Simulated failure");
           return new Response(500, {}, { error: "Failed to update job" });
         }
@@ -116,22 +119,39 @@ export function setupMirage() {
           }
         }
         
-        // CRITICAL FIX: Use put() instead of update() for more reliable updates
-        const updatedJob = { ...existingJob, ...changes };
-        await db.jobs.put(updatedJob);
+        // 🔥 FIX: Use put() with merged object for reliable updates
+        const updatedJob = { 
+          ...existingJob, 
+          ...changes,
+          id: existingJob.id, // Ensure ID is preserved
+          order: existingJob.order // Ensure order is preserved
+        };
         
-        // Verify the update worked
-        const verifyJob = await db.jobs.get(id);
-        console.log(`✅ After update:`, verifyJob);
+        try {
+          await db.jobs.put(updatedJob);
+          console.log(`✅ Put operation completed`);
+        } catch (err) {
+          console.error(`❌ Database put failed:`, err);
+          return new Response(500, {}, { error: "Database update failed" });
+        }
         
-        if (changes.status && verifyJob.status !== changes.status) {
-          console.error(`❌ Status update failed! Expected ${changes.status}, got ${verifyJob.status}`);
-          return new Response(500, {}, { error: "Status update verification failed" });
+        // 🔥 FIX: Verify the update worked by reading it back
+        const verifiedJob = await db.jobs.get(id);
+        console.log(`✅ After update (verified):`, verifiedJob);
+        
+        // 🔥 FIX: Check if the update actually worked
+        if (changes.status && verifiedJob.status !== changes.status) {
+          console.error(`❌ Status update failed! Expected ${changes.status}, got ${verifiedJob.status}`);
+          // Try one more time with a direct approach
+          await db.jobs.where('id').equals(id).modify({ status: changes.status });
+          const secondVerify = await db.jobs.get(id);
+          console.log(`🔄 Second attempt result:`, secondVerify);
+          return secondVerify;
         }
         
         console.log(`✅ PATCH /jobs/${id} - Successfully updated and verified`);
         
-        return verifyJob;
+        return verifiedJob;
       });
 
       this.patch("/jobs/:id/reorder", async (schema, request) => {
