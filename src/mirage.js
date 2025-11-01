@@ -14,42 +14,20 @@ export function setupMirage() {
       assessment: Model,
     },
 
-    factories: {
-      job: Factory.extend({
-        title() { return faker.company.catchPhrase(); },
-        slug() { return faker.helpers.slugify(this.title).toLowerCase(); },
-        status() { return faker.helpers.arrayElement(["active", "archived"]); },
-        tags() { return faker.helpers.arrayElements(["Remote", "Full-time", "Urgent", "Senior", "Junior"], { min: 0, max: 3 }); },
-        order() { return faker.number.int({ min: 0, max: 100 }); },
-      }),
-      candidate: Factory.extend({
-        name() { return faker.person.fullName(); },
-        email() { return faker.internet.email(); },
-        stage() { return faker.helpers.arrayElement(["applied", "screen", "tech", "offer", "hired", "rejected"]); },
-        jobId() { return faker.string.uuid(); },
-      }),
-    },
-
-    seeds(server) {
-      // No seeds here — we use Dexie auto-seed in main.jsx
-    },
-
     routes() {
       this.namespace = "api";
 
       // === JOBS ===
       this.get("/jobs", async (schema, request) => {
         const { search = "", status = "", page = 1, pageSize = 10 } = request.queryParams;
-        await new Promise(r => setTimeout(r, faker.number.int({ min: 200, max: 1200 })));
+        await new Promise(r => setTimeout(r, 300)); // Reduced delay
 
         let jobs = await db.jobs.toArray();
         
-        // Apply search filter
         if (search) {
           jobs = jobs.filter(j => j.title.toLowerCase().includes(search.toLowerCase()));
         }
         
-        // Apply status filter
         if (status) {
           jobs = jobs.filter(j => j.status === status);
         }
@@ -60,18 +38,14 @@ export function setupMirage() {
         const start = (page - 1) * pageSize;
         const data = jobs.slice(start, start + pageSize);
 
-        console.log(`📋 GET /jobs - Found ${total} jobs (status: ${status || 'all'}, search: ${search || 'none'})`);
-
+        console.log(`📋 GET /jobs - Found ${total} jobs (status: ${status || 'all'})`);
         return { data, total, page: +page, pageSize: +pageSize };
       });
 
       this.post("/jobs", async (schema, request) => {
-        await new Promise(r => setTimeout(r, faker.number.int({ min: 200, max: 1200 })));
-        if (Math.random() < 0.05) throw new Error("Failed to create job");
-
+        await new Promise(r => setTimeout(r, 300));
         const attrs = JSON.parse(request.requestBody);
         
-        // Check for duplicate slug
         const existing = await db.jobs.where('slug').equals(attrs.slug).first();
         if (existing) {
           return new Response(400, {}, { error: "Slug must be unique" });
@@ -81,104 +55,82 @@ export function setupMirage() {
         const job = { id, ...attrs, order: (await db.jobs.count()) };
         await db.jobs.add(job);
         
-        console.log(`✅ POST /jobs - Created job: ${job.title}`);
+        console.log(`✅ POST /jobs - Created: ${job.title}`);
         return job;
       });
 
-      // 🔥 FIXED: Corrected PATCH endpoint with proper response handling
+      // 🔥 CRITICAL: This is the main fix
       this.patch("/jobs/:id", async (schema, request) => {
-        const delay = faker.number.int({ min: 100, max: 400 });
-        await new Promise(r => setTimeout(r, delay));
-        
-        // DISABLE error simulation for debugging
-        // if (Math.random() < 0.03) {
-        //   console.error("❌ PATCH /jobs/:id - Simulated failure");
-        //   return new Response(500, {}, { error: "Failed to update job" });
-        // }
+        await new Promise(r => setTimeout(r, 200)); // Fast response
 
         const id = request.params.id;
         const changes = JSON.parse(request.requestBody);
         
         console.log(`\n========================================`);
-        console.log(`📝 PATCH /jobs/${id}`);
-        console.log(`📦 Changes requested:`, JSON.stringify(changes, null, 2));
+        console.log(`📝 PATCH /api/jobs/${id}`);
+        console.log(`📦 Requested changes:`, changes);
         
-        // CRITICAL: Get the existing job first
+        // Get existing job
         const existingJob = await db.jobs.get(id);
         
         if (!existingJob) {
-          console.error(`❌ Job ${id} not found in database`);
+          console.error(`❌ Job ${id} not found`);
           console.log(`========================================\n`);
           return new Response(404, {}, { error: "Job not found" });
         }
         
-        console.log(`📌 Current job state:`, JSON.stringify(existingJob, null, 2));
+        console.log(`📌 Current status: ${existingJob.status}`);
         
-        // Check if slug is being updated and if it's unique
+        // Check slug uniqueness if slug is being changed
         if (changes.slug && changes.slug !== existingJob.slug) {
           const existing = await db.jobs.where('slug').equals(changes.slug).first();
           if (existing && existing.id !== id) {
-            console.error(`❌ Slug conflict: ${changes.slug} already exists`);
+            console.error(`❌ Slug conflict`);
             console.log(`========================================\n`);
             return new Response(400, {}, { error: "Slug already taken" });
           }
         }
         
-        // 🔥 FIX: Create updated job object
+        // Merge changes
         const updatedJob = { 
           ...existingJob, 
-          ...changes,
-          id: existingJob.id,
-          order: existingJob.order
+          ...changes
         };
         
-        console.log(`🔧 Merged job object:`, JSON.stringify(updatedJob, null, 2));
+        console.log(`🔧 New status will be: ${updatedJob.status}`);
         
+        // Update database using transaction
         try {
-          // Use transaction for atomic update
           await db.transaction('rw', db.jobs, async () => {
             await db.jobs.put(updatedJob);
           });
-          console.log(`✅ Database transaction completed`);
+          console.log(`✅ Database updated`);
         } catch (err) {
-          console.error(`❌ Database put failed:`, err);
+          console.error(`❌ Database error:`, err);
           console.log(`========================================\n`);
-          return new Response(500, {}, { error: "Database update failed: " + err.message });
+          return new Response(500, {}, { error: "Database update failed" });
         }
         
-        // Verify the update by reading it back
-        const verifiedJob = await db.jobs.get(id);
-        console.log(`🔍 Verified job from DB:`, JSON.stringify(verifiedJob, null, 2));
+        // Verify update
+        const verified = await db.jobs.get(id);
+        console.log(`🔍 Verified status: ${verified.status}`);
         
-        // Double-check status if it was changed
-        if (changes.status) {
-          if (verifiedJob.status !== changes.status) {
-            console.error(`❌ STATUS MISMATCH! Expected: ${changes.status}, Got: ${verifiedJob.status}`);
-            console.log(`🔄 Attempting direct modification...`);
-            
-            await db.jobs.where('id').equals(id).modify({ status: changes.status });
-            const finalVerify = await db.jobs.get(id);
-            
-            console.log(`🔍 Final verification:`, JSON.stringify(finalVerify, null, 2));
-            console.log(`========================================\n`);
-            return finalVerify;
-          } else {
-            console.log(`✅ Status correctly updated to: ${verifiedJob.status}`);
-          }
+        if (verified.status !== changes.status && changes.status) {
+          console.error(`❌ VERIFICATION FAILED!`);
+          console.error(`   Expected: ${changes.status}`);
+          console.error(`   Got: ${verified.status}`);
+          console.log(`========================================\n`);
+          return new Response(500, {}, { error: "Status verification failed" });
         }
         
-        console.log(`✅ PATCH completed successfully`);
+        console.log(`✅ PATCH successful`);
         console.log(`========================================\n`);
         
-        return verifiedJob;
+        return verified;
       });
 
       this.patch("/jobs/:id/reorder", async (schema, request) => {
-        await new Promise(r => setTimeout(r, faker.number.int({ min: 200, max: 1200 })));
-        if (Math.random() < 0.1) {
-          console.error("❌ Reorder failed (simulated)");
-          return new Response(500, {}, { error: "Failed to reorder" });
-        }
+        await new Promise(r => setTimeout(r, 300));
 
         const { fromOrder, toOrder } = JSON.parse(request.requestBody);
         const jobs = await db.jobs.toArray();
@@ -197,7 +149,7 @@ export function setupMirage() {
       });
 
       this.get("/jobs/:id", async (schema, request) => {
-        await new Promise(r => setTimeout(r, faker.number.int({ min: 200, max: 1200 })));
+        await new Promise(r => setTimeout(r, 300));
         const job = await db.jobs.get(request.params.id);
         
         if (!job) {
@@ -210,7 +162,7 @@ export function setupMirage() {
       // === CANDIDATES ===
       this.get("/candidates", async (schema, request) => {
         const { search = "", stage = "" } = request.queryParams;
-        await new Promise(r => setTimeout(r, faker.number.int({ min: 200, max: 1200 })));
+        await new Promise(r => setTimeout(r, 300));
 
         let candidates = await db.candidates.toArray();
         
@@ -229,7 +181,7 @@ export function setupMirage() {
       });
 
       this.get("/candidates/:id", async (schema, request) => {
-        await new Promise(r => setTimeout(r, faker.number.int({ min: 200, max: 1200 })));
+        await new Promise(r => setTimeout(r, 300));
         const candidate = await db.candidates.get(request.params.id);
         
         if (!candidate) {
@@ -240,10 +192,7 @@ export function setupMirage() {
       });
 
       this.patch("/candidates/:id", async (schema, request) => {
-        await new Promise(r => setTimeout(r, faker.number.int({ min: 200, max: 1200 })));
-        if (Math.random() < 0.05) {
-          return new Response(500, {}, { error: "Failed to move candidate" });
-        }
+        await new Promise(r => setTimeout(r, 300));
 
         const id = request.params.id;
         const changes = JSON.parse(request.requestBody);
@@ -268,7 +217,7 @@ export function setupMirage() {
       });
 
       this.get("/candidates/:id/timeline", async (schema, request) => {
-        await new Promise(r => setTimeout(r, faker.number.int({ min: 200, max: 1200 })));
+        await new Promise(r => setTimeout(r, 300));
         
         const candidateId = request.params.id;
         
@@ -312,11 +261,7 @@ export function setupMirage() {
       });
 
       this.post("/candidates/:id/notes", async (schema, request) => {
-        await new Promise(r => setTimeout(r, faker.number.int({ min: 200, max: 1200 })));
-        
-        if (Math.random() < 0.05) {
-          return new Response(500, {}, { error: "Failed to add note" });
-        }
+        await new Promise(r => setTimeout(r, 300));
 
         const candidateId = request.params.id;
         const { text, createdAt } = JSON.parse(request.requestBody);
@@ -331,22 +276,19 @@ export function setupMirage() {
           return { success: true, message: "Note added successfully", id: noteId };
         } catch (error) {
           console.error("Error adding note:", error);
-          return new Response(500, {}, { error: "Failed to save note to database" });
+          return new Response(500, {}, { error: "Failed to save note" });
         }
       });
 
       // === ASSESSMENTS ===
       this.get("/assessments/:jobId", async (schema, request) => {
-        await new Promise(r => setTimeout(r, faker.number.int({ min: 200, max: 1200 })));
+        await new Promise(r => setTimeout(r, 300));
         const assessment = await db.assessments.get(request.params.jobId);
         return assessment || { jobId: request.params.jobId, sections: [] };
       });
 
       this.put("/assessments/:jobId", async (schema, request) => {
-        await new Promise(r => setTimeout(r, faker.number.int({ min: 200, max: 1200 })));
-        if (Math.random() < 0.05) {
-          return new Response(500, {}, { error: "Failed to save assessment" });
-        }
+        await new Promise(r => setTimeout(r, 300));
 
         const assessment = JSON.parse(request.requestBody);
         await db.assessments.put(assessment);
@@ -354,8 +296,9 @@ export function setupMirage() {
       });
 
       this.post("/assessments/:jobId/submit", () => {
-        return { success: true, message: "Assessment submitted locally" };
+        return { success: true, message: "Assessment submitted" };
       });
     },
   });
 }
+
